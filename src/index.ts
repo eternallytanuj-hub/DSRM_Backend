@@ -5,7 +5,7 @@ import etag from '@fastify/etag';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { fetchSatellites, getCachedSatellites, getSummary, getMarketplacePasses, searchMarketplaceWithGroq } from './services/satelliteFetcher';
-import { getAttestations, getLiveFrames, getOracleInfo, triggerOraclePass } from './services/telemetryOracle';
+import { getAttestations, getLiveFrames, getOracleInfo, triggerOraclePass, startOracleRelayer, registerActiveBooking } from './services/telemetryOracle';
 
 dotenv.config();
 
@@ -134,11 +134,28 @@ server.post('/api/v1/telemetry/trigger-pass', async (request, reply) => {
     }
 });
 
+server.post('/api/v1/telemetry/register-booking', async (request, reply) => {
+    const body = (request.body as any) || {};
+    if (!body.bookingRef || !body.bookingId) {
+        reply.code(400).send({ error: "bookingRef and bookingId are required" });
+        return;
+    }
+    registerActiveBooking(body);
+    return {
+        success: true,
+        message: `Booking ${body.bookingRef} registered with Oracle Relayer`,
+        booking: body
+    };
+});
+
 const start = async () => {
     try {
         // Fetch immediately on startup
         await fetchSatellites();
         
+        // Start background Oracle Relayer for automated smart contract settlement
+        startOracleRelayer();
+
         // Schedule fetch every 3 hours
         cron.schedule('0 */3 * * *', async () => {
             console.log("Running scheduled satellite fetch...");
