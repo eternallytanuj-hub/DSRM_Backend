@@ -5,6 +5,7 @@ import etag from '@fastify/etag';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { fetchSatellites, getCachedSatellites, getSummary, getMarketplacePasses, searchMarketplaceWithGroq } from './services/satelliteFetcher';
+import { getAttestations, getLiveFrames, getOracleInfo, triggerOraclePass } from './services/telemetryOracle';
 
 dotenv.config();
 
@@ -23,7 +24,9 @@ server.register(etag);
 
 // Add Cache-Control headers hook
 server.addHook('onRequest', (request, reply, done) => {
-    if (request.method === 'GET' && request.url.startsWith('/api/')) {
+    if (request.method === 'GET' && request.url.startsWith('/api/v1/telemetry')) {
+        reply.header('Cache-Control', 'no-cache, no-store, must-revalidate');
+    } else if (request.method === 'GET' && request.url.startsWith('/api/')) {
         reply.header('Cache-Control', 'public, max-age=3600, stale-while-revalidate=1800');
     }
     done();
@@ -93,6 +96,42 @@ server.post('/api/v1/marketplace/search', async (request, reply) => {
         count: matches.length,
         passes: matches
     };
+});
+
+// Telemetry Oracle API
+server.get('/api/v1/telemetry/attestations', async (request, reply) => {
+    const list = getAttestations();
+    const info = getOracleInfo();
+    return {
+        count: list.length,
+        oracle: info,
+        attestations: list
+    };
+});
+
+server.get('/api/v1/telemetry/live-frames', async (request, reply) => {
+    const frames = getLiveFrames();
+    return {
+        count: frames.length,
+        frames
+    };
+});
+
+server.get('/api/v1/telemetry/oracle-info', async (request, reply) => {
+    return getOracleInfo();
+});
+
+server.post('/api/v1/telemetry/trigger-pass', async (request, reply) => {
+    const body = (request.body as any) || {};
+    try {
+        const attestation = await triggerOraclePass(body);
+        return {
+            success: true,
+            attestation
+        };
+    } catch (e: any) {
+        reply.code(500).send({ error: e.message });
+    }
 });
 
 const start = async () => {
