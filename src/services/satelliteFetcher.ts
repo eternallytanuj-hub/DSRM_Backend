@@ -91,3 +91,15 @@ export function getCachedSatellites() {
         satellites: cachedSatellites
     };
 }
+
+export function getSummary() {
+    const summary: Record<string, number> = {};
+    for (const sat of cachedSatellites) {
+        summary[sat.cat] = (summary[sat.cat] || 0) + 1;
+    }
+    return {
+        total: cachedSatellites.length,
+        generatedAt: lastGeneratedAt,
+        categories: summary
+    };
+}
