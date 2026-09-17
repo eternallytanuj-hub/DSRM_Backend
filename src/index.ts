@@ -4,7 +4,7 @@ import compress from '@fastify/compress';
 import etag from '@fastify/etag';
 import dotenv from 'dotenv';
 import cron from 'node-cron';
-import { fetchSatellites, getCachedSatellites, getSummary } from './services/satelliteFetcher';
+import { fetchSatellites, getCachedSatellites, getSummary, getMarketplacePasses, searchMarketplaceWithGroq } from './services/satelliteFetcher';
 
 dotenv.config();
 
@@ -12,7 +12,7 @@ const server = fastify({ logger: true });
 
 server.register(cors, {
     origin: '*', 
-    methods: ['GET']
+    methods: ['GET', 'POST']
 });
 
 // Enable Brotli and Gzip compression
@@ -66,6 +66,33 @@ server.get('/api/v1/satellites/summary', async (request, reply) => {
         return;
     }
     return summary;
+});
+
+server.get('/api/v1/marketplace/passes', async (request, reply) => {
+    const passes = getMarketplacePasses();
+    return {
+        count: passes.length,
+        passes
+    };
+});
+
+server.post('/api/v1/marketplace/search', async (request, reply) => {
+    const body = request.body as { query?: string };
+    const query = body?.query || '';
+    if (!query.trim()) {
+        const passes = getMarketplacePasses();
+        return {
+            count: passes.length,
+            passes
+        };
+    }
+
+    const matches = await searchMarketplaceWithGroq(query);
+    return {
+        query,
+        count: matches.length,
+        passes: matches
+    };
 });
 
 const start = async () => {
