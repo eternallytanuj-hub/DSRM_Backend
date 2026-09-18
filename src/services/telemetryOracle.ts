@@ -417,11 +417,19 @@ export async function triggerOraclePass(params: {
                 };
 
                 // Sync settlement to Supabase
+                const dbStatus = statusType === 'REFUNDED' ? 'REFUNDED' : statusType === 'PARTIAL_REFUND' ? 'PARTIALLY_SETTLED' : 'SETTLED';
                 updateBookingSettlementInSupabase(
                     bookingId,
-                    statusType === 'REFUNDED' ? 'REFUNDED' : 'SETTLED',
+                    dbStatus,
                     settleTx.hash,
-                    { blockNumber: blockNum, gasUsed: gas, operatorPayout: settlementRecord.operatorPayout, buyerRefund: settlementRecord.buyerRefund }
+                    { 
+                        blockNumber: blockNum, 
+                        gasUsed: gas, 
+                        operatorPayout: settlementRecord.operatorPayout, 
+                        buyerRefund: settlementRecord.buyerRefund,
+                        satName: satellite,
+                        operator: wallet.address
+                    }
                 ).catch(err => {
                     console.error('[Oracle] Failed to update settlement in Supabase:', err);
                 });

@@ -35,7 +35,7 @@ export async function recordBookingInSupabase(booking: {
             id: booking.id,
             booking_id: booking.booking_id,
             user_address: (booking.user_address || '0xc25f9F0Ce27A2D248c43563a32cDC4886D069176').toLowerCase(),
-            operator_address: booking.operator_address || null,
+            operator_address: booking.operator_address ? booking.operator_address.toLowerCase() : null,
             satellite: booking.satellite,
             norad_id: booking.norad_id || null,
             window_text: booking.window_text || 'Active Window',
@@ -75,22 +75,38 @@ export async function updateBookingSettlementInSupabase(
         
         const { data: records } = await sb
             .from('bookings')
-            .select('id')
+            .select('id, metadata')
             .or(`id.eq.${bookingIdOrRef},booking_id.eq.${bookingIdOrRef}`);
 
         if (records && records.length > 0) {
             for (const rec of records) {
+                const mergedMetadata = { ...(rec.metadata || {}), ...(metadata || {}) };
                 await sb
                     .from('bookings')
                     .update({
                         status,
                         settlement_tx_hash: settlementTxHash,
                         etherscan_url: `https://sepolia.etherscan.io/tx/${settlementTxHash}`,
-                        metadata: metadata || {}
+                        metadata: mergedMetadata
                     })
                     .eq('id', rec.id);
                 console.log(`[Supabase Backend] Updated booking ${rec.id} to ${status}`);
             }
+        } else {
+            console.log(`[Supabase Backend] No existing booking found for ${bookingIdOrRef}, recording new settled receipt...`);
+            const fallbackRef = bookingIdOrRef.startsWith('0x') ? `BKG-ONCHAIN-${bookingIdOrRef.slice(2, 8).toUpperCase()}` : bookingIdOrRef;
+            await sb.from('bookings').insert({
+                id: fallbackRef,
+                booking_id: bookingIdOrRef,
+                user_address: (metadata?.buyer || '0xc25f9f0ce27a2d248c43563a32cdc4886d069176').toLowerCase(),
+                operator_address: metadata?.operator ? metadata.operator.toLowerCase() : null,
+                satellite: metadata?.satName || 'STARLINK-32573',
+                locked_amount: metadata?.operatorPayout || '0.0001 Sepolia ETH',
+                status,
+                settlement_tx_hash: settlementTxHash,
+                etherscan_url: `https://sepolia.etherscan.io/tx/${settlementTxHash}`,
+                metadata: metadata || {}
+            });
         }
     } catch (e: any) {
         console.error('[Supabase Backend] Exception updating settlement:', e.message);
