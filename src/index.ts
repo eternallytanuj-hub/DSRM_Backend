@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import cron from 'node-cron';
 import { fetchSatellites, getCachedSatellites, getSummary, getMarketplacePasses, searchMarketplaceWithGroq } from './services/satelliteFetcher';
 import { getAttestations, getLiveFrames, getOracleInfo, triggerOraclePass, startOracleRelayer, registerActiveBooking } from './services/telemetryOracle';
+import { recordBookingInSupabase, getOperatorListingsFromSupabase, getProfilesFromSupabase } from './services/supabaseClient';
 
 dotenv.config();
 
@@ -141,10 +142,40 @@ server.post('/api/v1/telemetry/register-booking', async (request, reply) => {
         return;
     }
     registerActiveBooking(body);
+    
+    // Also explicitly persist in Supabase
+    await recordBookingInSupabase({
+        id: body.bookingRef,
+        booking_id: body.bookingId,
+        user_address: body.userAddress,
+        operator_address: body.operator,
+        satellite: body.satellite || "STARLINK-32573",
+        tx_hash: body.txHash,
+        status: 'ACTIVE'
+    });
+
     return {
         success: true,
-        message: `Booking ${body.bookingRef} registered with Oracle Relayer`,
+        message: `Booking ${body.bookingRef} registered with Oracle Relayer and persisted in Supabase`,
         booking: body
+    };
+});
+
+// Supabase Operator Listings
+server.get('/api/v1/operator/listings', async (request, reply) => {
+    const listings = await getOperatorListingsFromSupabase();
+    return {
+        count: listings.length,
+        listings
+    };
+});
+
+// Supabase Profiles
+server.get('/api/v1/profiles', async (request, reply) => {
+    const profiles = await getProfilesFromSupabase();
+    return {
+        count: profiles.length,
+        profiles
     };
 });
 

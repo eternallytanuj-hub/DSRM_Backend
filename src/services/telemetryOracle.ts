@@ -1,6 +1,7 @@
 import { ethers } from 'ethers';
 import fs from 'fs';
 import path from 'path';
+import { updateBookingSettlementInSupabase, recordBookingInSupabase } from './supabaseClient';
 
 const candidatePaths = [
     path.join(__dirname, '..', 'contracts', 'SatelliteEscrow.json'),
@@ -279,6 +280,17 @@ export function registerActiveBooking(booking: {
         registeredAt: Date.now(),
         settled: false
     });
+
+    // Record in Supabase
+    recordBookingInSupabase({
+        id: booking.bookingRef,
+        booking_id: booking.bookingId,
+        satellite: booking.satellite || "STARLINK-32573",
+        operator_address: booking.operator,
+        status: 'ACTIVE'
+    }).catch(err => {
+        console.error('[Oracle] Failed to record active booking in Supabase:', err);
+    });
 }
 
 /**
@@ -403,6 +415,16 @@ export async function triggerOraclePass(params: {
                     settledAt: new Date().toISOString(),
                     gasUsed: gas
                 };
+
+                // Sync settlement to Supabase
+                updateBookingSettlementInSupabase(
+                    bookingId,
+                    statusType === 'REFUNDED' ? 'REFUNDED' : 'SETTLED',
+                    settleTx.hash,
+                    { blockNumber: blockNum, gasUsed: gas, operatorPayout: settlementRecord.operatorPayout, buyerRefund: settlementRecord.buyerRefund }
+                ).catch(err => {
+                    console.error('[Oracle] Failed to update settlement in Supabase:', err);
+                });
             } else {
                 console.log(`[Oracle] Escrow ${bookingRef} already settled or in state: ${escrow.state}`);
             }
@@ -519,6 +541,16 @@ export function startOracleRelayer() {
                             const blockNum = receipt?.blockNumber;
                             const gas = receipt ? receipt.gasUsed.toLocaleString() : undefined;
                             console.log(`[Oracle Relayer] Confirmed on block ${blockNum}`);
+
+                            // Sync settlement to Supabase
+                            updateBookingSettlementInSupabase(
+                                id,
+                                quality >= 95.0 ? 'SETTLED' : 'PARTIALLY_SETTLED',
+                                tx.hash,
+                                { blockNumber: blockNum, gasUsed: gas, quality }
+                            ).catch(err => {
+                                console.error('[Oracle Relayer] Failed to update settlement in Supabase:', err);
+                            });
 
                             attestations.unshift({
                                 id: `ATT-${Math.floor(1000 + Math.random() * 9000)}-RELAY`,
