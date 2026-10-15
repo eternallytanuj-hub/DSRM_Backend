@@ -7,6 +7,12 @@ import cron from 'node-cron';
 import { fetchSatellites, getCachedSatellites, getSummary, getMarketplacePasses, searchMarketplaceWithGroq } from './services/satelliteFetcher';
 import { getAttestations, getLiveFrames, getOracleInfo, triggerOraclePass, startOracleRelayer, registerActiveBooking } from './services/telemetryOracle';
 import { recordBookingInSupabase, getOperatorListingsFromSupabase, getProfilesFromSupabase } from './services/supabaseClient';
+import {
+    prepareAgreement,
+    verifyAgreement,
+    confirmAgreementDeposit,
+    getAgreementByBookingId,
+} from './services/agreementService';
 
 dotenv.config();
 
@@ -177,6 +183,52 @@ server.get('/api/v1/profiles', async (request, reply) => {
         count: profiles.length,
         profiles
     };
+});
+
+// Agreement Flow Endpoints
+server.post('/api/agreements/prepare', async (request, reply) => {
+    try {
+        const body = (request.body as any) || {};
+        const result = await prepareAgreement(body);
+        return result;
+    } catch (err: any) {
+        reply.code(400).send({ error: err.message });
+    }
+});
+
+server.post('/api/agreements/verify', async (request, reply) => {
+    try {
+        const body = (request.body as any) || {};
+        const result = await verifyAgreement(body);
+        return result;
+    } catch (err: any) {
+        reply.code(400).send({ error: err.message });
+    }
+});
+
+server.post('/api/agreements/confirm', async (request, reply) => {
+    try {
+        const body = (request.body as any) || {};
+        const { bookingId, txHash } = body;
+        if (!bookingId || !txHash) {
+            reply.code(400).send({ error: 'bookingId and txHash are required' });
+            return;
+        }
+        const result = await confirmAgreementDeposit(bookingId, txHash);
+        return result;
+    } catch (err: any) {
+        reply.code(400).send({ error: err.message });
+    }
+});
+
+server.get('/api/agreements/:bookingId', async (request, reply) => {
+    const { bookingId } = request.params as { bookingId: string };
+    const agreement = await getAgreementByBookingId(bookingId);
+    if (!agreement) {
+        reply.code(404).send({ error: 'Agreement not found' });
+        return;
+    }
+    return { agreement };
 });
 
 const start = async () => {

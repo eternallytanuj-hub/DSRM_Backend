@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "tsc && node dist/__tests__/agreementService.test.js",
     "build": "tsc && cp -r src/contracts dist/ 2>/dev/null || true",
     "start": "node dist/index.js",
     "dev": "nodemon src/index.ts"
@@ -24,7 +24,8 @@
     "ethers": "^6.17.0",
     "fastify": "^5.12.5",
     "node-cron": "^4.6.0",
-    "solc": "^0.8.20"
+    "solc": "^0.8.20",
+    "viem": "^2.57.7"
   },
   "devDependencies": {
     "@types/node": "^26.6.1",
